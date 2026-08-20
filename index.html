@@ -168,6 +168,15 @@ nav button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width
 nav button[aria-current="page"]{color:var(--accent)}
 
 /* ============================== MISC ================================== */
+.updbar{
+  position:fixed;left:10px;right:10px;z-index:120;
+  bottom:calc(80px + env(safe-area-inset-bottom));
+  max-width:800px;margin:0 auto;
+  background:var(--accent);color:var(--on-accent);
+  border-radius:var(--r-lg);padding:11px 13px;box-shadow:var(--shadow);
+  display:flex;align-items:center;gap:10px;font-size:.85rem;font-weight:600;
+}
+.updbar button{background:rgba(255,255,255,.22);color:#fff;padding:7px 13px;font-size:.8rem;font-weight:700;flex:none;margin-left:auto}
 .toast{
   position:fixed;left:50%;transform:translateX(-50%);
   bottom:calc(84px + env(safe-area-inset-bottom));z-index:100;
@@ -281,6 +290,9 @@ async function loadLib(){
    La publishable key es pública por diseño (viaja en el navegador de cualquiera
    que abra la página). Lo que protege los datos es el login + las políticas RLS.
    La clave 'secret' / 'service_role' NO va acá nunca.                          */
+/* Versión del archivo. Al publicar una nueva en GitHub, subila y la app avisa sola. */
+const VERSION = '2026.08.20-1';
+
 const CONFIG = {
   url: 'https://bynhjpopxootvswionhu.supabase.co',
   key: 'sb_publishable_7z4xe10i3AVaL5DHpYmzQw_RPlWDrVF'
@@ -446,6 +458,8 @@ async function start(){
   await loadAll();
   buildMesSel();
   render();
+  chequearVersion();
+  setInterval(chequearVersion, 30*60*1000);   // y cada media hora
   sb.channel('ff')
     .on('postgres_changes',{event:'*',schema:'public',table:'gastos'},   onRemote)
     .on('postgres_changes',{event:'*',schema:'public',table:'ingresos'}, onRemote)
@@ -945,6 +959,7 @@ function renderCfg(){
       <button class="btn-ghost btn-sm" id="btnReload">Recargar datos</button>
     </div>
     <div class="xs dim mt-s">${D.gastos.length} gastos y ${D.ingresos.length} ingresos cargados.</div>
+    <div class="xs dim">Versión ${VERSION}</div>
   </div>`;
 
   $('#btnOut').onclick = async ()=>{ await sb.auth.signOut(); location.reload(); };
@@ -981,6 +996,33 @@ function exportCSV(todo=false){
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   a.download=`gastos_${todo?'completo':mes}.csv`; a.click();
   URL.revokeObjectURL(a.href); toast('CSV descargado');
+}
+
+/* ================= AVISO DE VERSIÓN NUEVA =================
+   Vuelve a pedir este mismo archivo salteando la caché y compara la versión.
+   Si en GitHub hay una más nueva, ofrece recargar. Sin service worker: no
+   cachea nada por su cuenta, así que no puede quedar "pegado" en una versión. */
+async function chequearVersion(){
+  try{
+    const u = location.pathname + '?v=' + Date.now();
+    const r = await fetch(u, { cache:'no-store' });
+    if(!r.ok) return;
+    const txt = await r.text();
+    const m = txt.match(/const VERSION = '([^']+)'/);
+    if(!m || m[1] === VERSION) return;
+    mostrarBannerUpdate(m[1]);
+  }catch{ /* sin conexión: no molestamos */ }
+}
+function mostrarBannerUpdate(nueva){
+  if(document.getElementById('upd')) return;
+  const d=document.createElement('div');
+  d.id='upd'; d.className='updbar';
+  d.innerHTML = `<span>Hay una versión nueva de la app <b>(${esc(nueva)})</b></span>
+                 <button id="updBtn">Actualizar</button>`;
+  document.body.appendChild(d);
+  document.getElementById('updBtn').onclick = ()=>{
+    location.replace(location.pathname + '?v=' + Date.now());
+  };
 }
 
 window.addEventListener('error', e=>{ console.error(e.error||e.message); });
