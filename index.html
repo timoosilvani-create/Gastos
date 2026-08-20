@@ -190,9 +190,11 @@ svg.chart{display:block;width:100%;height:auto;overflow:visible}
 <div id="setup" class="gate hide">
   <div class="card">
     <h1>Conectar con Supabase</h1>
-    <p class="small muted mt-s">Pegá los datos de tu proyecto. Quedan guardados en este dispositivo. Están en Supabase → Project Settings → Data API.</p>
+    <p class="small muted mt-s">Pegá los datos de tu proyecto. Quedan guardados en este dispositivo.
+    Los encontrás en Supabase, botón <b>Connect</b> arriba de todo, o en <b>Settings → API Keys</b>.</p>
     <div class="field mt"><label>Project URL</label><input id="cfgUrl" placeholder="https://xxxxx.supabase.co" autocapitalize="off" spellcheck="false"></div>
-    <div class="field"><label>Anon public key</label><input id="cfgKey" placeholder="eyJhbGciOi..." autocapitalize="off" spellcheck="false"></div>
+    <div class="field"><label>Publishable key (o anon public)</label><input id="cfgKey" placeholder="sb_publishable_...  ó  eyJhbGciOi..." autocapitalize="off" spellcheck="false">
+      <div class="xs dim" style="margin-top:4px">Sirve cualquiera de las dos. La que <b>nunca</b> va acá es la <i>secret</i> / <i>service_role</i>.</div></div>
     <button class="btn-primary" id="cfgSave">Guardar y continuar</button>
   </div>
 </div>
@@ -392,8 +394,10 @@ async function boot(){
 }
 $('#cfgSave').onclick = ()=>{
   const url=$('#cfgUrl').value.trim().replace(/\/+$/,''), key=$('#cfgKey').value.trim();
-  if(!/^https:\/\/.+\.supabase\.co$/.test(url)) return toast('La URL no parece válida');
-  if(key.length<40) return toast('La anon key no parece válida');
+  if(!/^https:\/\/[^\s/]+\.[^\s/]+$/.test(url)) return toast('La URL no parece válida. Tiene que empezar con https://');
+  if(/^sb_secret_/.test(key) || /service_role/.test(key))
+    return toast('Esa es la clave secreta. Usá la publishable o la anon.');
+  if(key.length<20) return toast('La clave no parece completa. Copiala entera.');
   localStorage.setItem(LS, JSON.stringify({url,key})); location.reload();
 };
 $('#cfgReset').onclick = ()=>{ localStorage.removeItem(LS); location.reload(); };
