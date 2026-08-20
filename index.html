@@ -168,6 +168,14 @@ nav button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width
 nav button[aria-current="page"]{color:var(--accent)}
 
 /* ============================== MISC ================================== */
+.donutwrap{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.donutsvg{width:168px;height:168px;flex:none}
+.donutleg{flex:1;min-width:186px;display:flex;flex-direction:column;gap:4px}
+.dl{display:grid;grid-template-columns:10px 1fr auto;gap:6px;align-items:center;font-size:.78rem}
+.dl s{width:9px;height:9px;border-radius:2px;text-decoration:none}
+.dl .dlx{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dl b{font-variant-numeric:tabular-nums}
+.dl .dlv{grid-column:2/-1;font-size:.7rem;color:var(--ink-3);font-variant-numeric:tabular-nums;margin-top:-3px}
 .updbar{
   position:fixed;left:10px;right:10px;z-index:120;
   bottom:calc(80px + env(safe-area-inset-bottom));
@@ -291,7 +299,7 @@ async function loadLib(){
    que abra la página). Lo que protege los datos es el login + las políticas RLS.
    La clave 'secret' / 'service_role' NO va acá nunca.                          */
 /* Versión del archivo. Al publicar una nueva en GitHub, subila y la app avisa sola. */
-const VERSION = '2026.08.20-1';
+const VERSION = '2026.08.20-2';
 
 const CONFIG = {
   url: 'https://bynhjpopxootvswionhu.supabase.co',
@@ -359,6 +367,37 @@ function barsH(items, total){
       <span class="track"><span class="fill" style="width:${(100*i.value/max).toFixed(1)}%;background:${i.color}"></span></span>
     </div>`).join('');
 }
+/* Torta (donut): reparto de un total. Máximo 8 porciones + "Otros",
+   en el orden fijo de la paleta y con leyenda siempre presente. */
+function donut(items, total, cur){
+  if(!items.length || !total) return '<div class="empty">Sin datos para este período.</div>';
+  let d=items.filter(x=>x.value>0);
+  if(d.length>8){ const o=d.slice(7).reduce((s,x)=>s+x.value,0);
+    d=d.slice(0,7).concat([{label:'Otros',value:o}]); }
+  /* Los colores de catálogo se repiten entre categorías; dentro de una misma
+     torta eso es ilegible. Se asignan los 8 tonos de la paleta en orden fijo y
+     cada porción va rotulada en la leyenda, así la identidad nunca es solo color. */
+  d=d.map((x,i)=>({...x, color: x.label==='Otros' ? cssv('--ink-3') : cssv(PAL[i%PAL.length])}));
+  const R=78,r=48,CX=100,CY=100,C=2*Math.PI*((R+r)/2),W=R-r;
+  let acc=0; const segs=[];
+  d.forEach(x=>{
+    const len=C*(x.value/total);
+    segs.push('<circle cx="'+CX+'" cy="'+CY+'" r="'+((R+r)/2)+'" fill="none" stroke="'+x.color+
+      '" stroke-width="'+W+'" stroke-dasharray="'+Math.max(len-2,0.5)+' '+(C-Math.max(len-2,0.5))+
+      '" stroke-dashoffset="'+(-acc)+'" transform="rotate(-90 '+CX+' '+CY+')"><title>'+
+      esc(x.label)+': '+money(x.value,cur)+' ('+(100*x.value/total).toFixed(1)+'%)</title></circle>');
+    acc+=len;
+  });
+  const top=d[0];
+  return '<div class="donutwrap"><svg viewBox="0 0 200 200" class="donutsvg" role="img">'+segs.join('')+
+    '<text x="100" y="93" text-anchor="middle" font-size="9.5" fill="'+cssv('--ink-3')+'">mayor</text>'+
+    '<text x="100" y="107" text-anchor="middle" font-size="11.5" font-weight="700" fill="'+cssv('--ink')+'">'+esc(top.label.slice(0,15))+'</text>'+
+    '<text x="100" y="121" text-anchor="middle" font-size="10" fill="'+cssv('--ink-2')+'">'+(100*top.value/total).toFixed(0)+'%</text>'+
+    '</svg><div class="donutleg">'+d.map(x=>'<div class="dl"><s style="background:'+x.color+'"></s>'+
+      '<span class="dlx">'+esc(x.label)+'</span><b>'+(100*x.value/total).toFixed(1)+'%</b>'+
+      '<span class="dlv">'+money(x.value,cur)+'</span></div>').join('')+'</div></div>';
+}
+
 /* Línea de evolución mensual. Una sola serie: sin leyenda, el título la nombra. */
 function lineChart(points, cur){
   const pts = points.filter(p=>p.value!=null);
@@ -391,7 +430,16 @@ const byId = (arr,id)=>arr.find(x=>x.id===id);
 const catOf = id => byId(D.categorias,id);
 const perOf = id => byId(D.personas,id);
 const medOf = id => byId(D.medios,id);
-const gastosMes = (m,cur) => D.gastos.filter(g=>!g.eliminado && g.mes===m && (!cur||g.moneda===cur));
+/* Un gasto "computa" si entra en el análisis familiar. Los personales de los
+   hijos se destildan desde Ajustes y dejan de sumar. */
+let verTodo = false;
+const aplica = g => verTodo || g.computa !== false;
+
+/* El mes en curso todavía no cerró: no se analiza. */
+const mesAbierto = () => thisMonth();
+const cerrado = m => m < mesAbierto();
+
+const gastosMes = (m,cur) => D.gastos.filter(g=>!g.eliminado && g.mes===m && aplica(g) && (!cur||g.moneda===cur));
 const ingresosMes = (m,cur)=> D.ingresos.filter(g=>!g.eliminado && g.mes===m && (!cur||g.moneda===cur));
 const sum = a => a.reduce((s,x)=>s+Number(x.monto||0),0);
 
@@ -404,7 +452,7 @@ function groupBy(rows, keyFn, labelFn, colorFn){
 }
 function mesesConDatos(){
   const s=new Set([...D.gastos.filter(g=>!g.eliminado).map(g=>g.mes),
-                   ...D.ingresos.filter(g=>!g.eliminado).map(g=>g.mes), thisMonth()]);
+                   ...D.ingresos.filter(g=>!g.eliminado).map(g=>g.mes)]);
   return [...s].filter(Boolean).sort();
 }
 
@@ -495,8 +543,9 @@ $$('nav button').forEach(b=> b.onclick = ()=>{
   window.scrollTo(0,0); render();
 });
 function buildMesSel(){
-  const ms=mesesConDatos();
-  if(!ms.includes(mes)) mes = ms[ms.length-1] || thisMonth();
+  /* Solo meses ya cerrados: el mes en curso todavía no tiene el resumen. */
+  const ms=mesesConDatos().filter(cerrado);
+  if(!ms.includes(mes)) mes = ms[ms.length-1] || addMonths(thisMonth(),-1);
   $('#mesSel').innerHTML = ms.map(m=>`<option value="${m}"${m===mes?' selected':''}>${monthLabel(m)}</option>`).join('');
 }
 $('#mesSel').onchange = e => { mes=e.target.value; render(); };
@@ -748,8 +797,10 @@ function renderMes(){
 
 /* ======================= ANÁLISIS ========================= */
 let anaCur='ARS', anaN=12;
+let persRev=null;
 function renderAna(){
   let ms=[]; for(let i=anaN-1;i>=0;i--) ms.push(addMonths(mes,-i));
+  ms=ms.filter(cerrado);                      // nunca analizamos el mes en curso
   /* Un mes sin resumen cargado no es un mes de gasto cero: se recorta el tramo
      inicial sin datos para no dibujar una caída que nunca existió. */
   const conAlgo = m => gastosMes(m).length>0 || ingresosMes(m).length>0;
@@ -759,7 +810,7 @@ function renderAna(){
   const serieIng = ms.map(m=>({mes:m, value:sum(ingresosMes(m,anaCur))}));
   const conDatos = serie.filter(p=>p.value>0);
   const prom = conDatos.length? conDatos.reduce((s,p)=>s+p.value,0)/conDatos.length : 0;
-  const rango = D.gastos.filter(g=>!g.eliminado && g.moneda===anaCur && ms.includes(g.mes));
+  const rango = D.gastos.filter(g=>!g.eliminado && aplica(g) && g.moneda===anaCur && ms.includes(g.mes));
 
   const cats = groupBy(rango,r=>r.categoria_id,r=>catOf(r.categoria_id)?.nombre||'Sin categoría',
                         r=>catOf(r.categoria_id)?.color||cssv('--ink-3')).map(o=>({...o,cur:anaCur}));
@@ -795,6 +846,12 @@ function renderAna(){
         ${[3,6,12,24].map(n=>`<option value="${n}"${anaN===n?' selected':''}>${n} meses</option>`).join('')}
       </select>
     </div>
+    <div class="row mb" style="gap:8px">
+      <div class="seg grow">
+        <button data-amb="fam" aria-pressed="${!verTodo}">Solo familiar</button>
+        <button data-amb="all" aria-pressed="${verTodo}">Todo</button>
+      </div>
+    </div>
     <div class="kpis">
       <div class="kpi"><div class="l">Promedio mensual</div><div class="v num">${money(prom,anaCur)}</div>
         <div class="d">sobre ${conDatos.length} ${conDatos.length===1?'mes':'meses'} con datos</div></div>
@@ -810,10 +867,22 @@ function renderAna(){
       ${ms.map((m,i)=>{const a=serieIng[i].value,b=serie[i].value; if(!a&&!b) return '';
         return `<tr><td>${monthLabel(m)}</td><td class="n">${a?money(a,anaCur):'—'}</td>
         <td class="n">${b?money(b,anaCur):'—'}</td>
-        <td class="n ${a-b>=0?'dn':'up'}">${(a||b)?money(a-b,anaCur):'—'}</td></tr>`;}).join('')}
+        <td class="n ${!a?'dim':(a-b>=0?'dn':'up')}">${a?money(a-b,anaCur):'—'}</td></tr>`;}).join('')}
     </table></div></div>
 
-  <div class="card"><div class="card-t">Gasto por categoría · acumulado ${anaN} meses</div>${barsH(cats,totalR)}</div>
+  <div class="card"><div class="card-t">Reparto por categoría · ${ms.length} ${ms.length===1?'mes':'meses'}</div>
+    ${donut(cats,totalR,anaCur)}</div>
+
+  <div class="card"><div class="card-t">Reparto por persona</div>${donut(pers,totalR,anaCur)}</div>
+
+  <div class="card"><div class="card-t">Fijos, variables y cuotas</div>
+    ${donut([
+      {label:'Fijos',    value:rango.filter(r=>r.tipo==='fijo'&&!(r.cuota_total>1)).reduce((s,x)=>s+Number(x.monto),0), color:cssv('--s1')},
+      {label:'Variables',value:rango.filter(r=>r.tipo!=='fijo'&&!(r.cuota_total>1)).reduce((s,x)=>s+Number(x.monto),0), color:cssv('--s2')},
+      {label:'Cuotas',   value:rango.filter(r=>r.cuota_total>1).reduce((s,x)=>s+Number(x.monto),0), color:cssv('--s3')}
+    ].filter(x=>x.value>0).sort((a,b)=>b.value-a.value), totalR, anaCur)}</div>
+
+  <div class="card"><div class="card-t">Gasto por categoría · detalle</div>${barsH(cats,totalR)}</div>
 
   <div class="card"><div class="card-t">Este mes vs promedio, por categoría</div>
     <div class="scroll-x"><table style="min-width:420px"><tr><th>Categoría</th><th class="n">${monthShort(mes)}</th><th class="n">Promedio</th><th class="n">Dif</th></tr>
@@ -828,6 +897,7 @@ function renderAna(){
   <div class="card"><div class="card-t">Dónde más se gasta · top 10</div>${barsH(com,totalR)}</div>`;
 
   $$('#v-ana .seg button[data-c]').forEach(b=>b.onclick=()=>{anaCur=b.dataset.c;renderAna();});
+  $$('#v-ana .seg button[data-amb]').forEach(b=>b.onclick=()=>{verTodo=b.dataset.amb==='all';render();});
   $('#anaN').onchange=e=>{anaN=+e.target.value;renderAna();};
 }
 
@@ -909,6 +979,7 @@ function renderCuo(){
 
 /* ========================= AJUSTES ======================== */
 function renderCfg(){
+  if(!persRev) persRev = (D.personas.find(p=>p.nombre==='Juana Inés')||D.personas[0]||{}).id;
   const yaGenerado = D.gastos.some(g=>g.tipo==='fijo' && g.mes===thisMonth() && g.notas==='auto:fijo');
   const totalFijos = D.fijos.filter(f=>f.moneda==='ARS').reduce((s,f)=>s+Number(f.monto_estimado),0);
 
@@ -939,6 +1010,37 @@ function renderCfg(){
   </div>
 
   <div class="card">
+    <div class="spread mb"><div class="card-t" style="margin:0">Gastos personales</div>
+      <span class="badge">${D.gastos.filter(g=>!g.eliminado && g.computa===false).length} destildados</span></div>
+    <p class="small muted">Destildá lo que no corresponde al gasto familiar. Lo destildado sigue guardado
+    pero deja de sumar en Mes y en Análisis.</p>
+    <div class="row mt-s" style="gap:7px;flex-wrap:wrap">
+      <select id="perSel" style="width:auto;flex:1;min-width:150px">
+        ${D.personas.filter(p=>p.activa).map(p=>`<option value="${p.id}"${p.id===persRev?' selected':''}>${esc(p.nombre)}</option>`).join('')}
+      </select>
+      <button class="btn-sm btn-ghost" id="btnNone">Destildar todos</button>
+      <button class="btn-sm btn-ghost" id="btnAll">Tildar todos</button>
+    </div>
+    ${(()=>{ const L=D.gastos.filter(g=>!g.eliminado && g.persona_id===persRev)
+               .sort((a,b)=>Math.abs(b.monto)-Math.abs(a.monto));
+      const inc=L.filter(g=>g.computa!==false).reduce((s,x)=>s+Number(x.monto),0);
+      const exc=L.filter(g=>g.computa===false).reduce((s,x)=>s+Number(x.monto),0);
+      if(!L.length) return '<div class="empty">Sin gastos de esta persona.</div>';
+      return `<div class="row mt-s" style="gap:10px">
+        <div class="kpi grow" style="box-shadow:none"><div class="l">Cuenta como familiar</div><div class="v num" style="font-size:1rem">${money(inc)}</div></div>
+        <div class="kpi grow" style="box-shadow:none"><div class="l">Queda afuera</div><div class="v num" style="font-size:1rem">${money(exc)}</div></div>
+      </div>
+      <div class="list mt-s">${L.slice(0,300).map(g=>`<div class="item">
+        <input type="checkbox" class="ckc" data-id="${g.id}" ${g.computa!==false?'checked':''} style="width:auto;flex:none">
+        <span class="sw" style="background:${catOf(g.categoria_id)?.color||cssv('--ink-3')}"></span>
+        <span class="grow"><span class="t">${esc(g.descripcion)}</span>
+          <span class="s">${monthShort(g.mes)} · ${esc(catOf(g.categoria_id)?.nombre||'—')}${g.cuota_total>1?` · cuota ${g.cuota_nro}/${g.cuota_total}`:''}</span></span>
+        <span class="a">${money(g.monto,g.moneda)}</span></div>`).join('')}</div>
+      ${L.length>300?`<div class="xs dim center mt-s">Mostrando los 300 de mayor importe de ${L.length}.</div>`:''}`;
+    })()}
+  </div>
+
+  <div class="card">
     <div class="card-t">Categorías (${D.categorias.length})</div>
     <div class="chips">${D.categorias.map(c=>`<span class="chip"><span class="sw" style="background:${c.color}"></span>${esc(c.nombre)}</span>`).join('')}</div>
     <div class="xs dim mt-s">Para agregar o renombrar categorías, entrá a Supabase → Table editor → categorias.</div>
@@ -962,6 +1064,24 @@ function renderCfg(){
     <div class="xs dim">Versión ${VERSION}</div>
   </div>`;
 
+  $('#perSel').onchange = e => { persRev=e.target.value; renderCfg(); };
+  $$('#v-cfg .ckc').forEach(c=> c.onchange = async ()=>{
+    const { error } = await sb.from('gastos').update({computa:c.checked}).eq('id',c.dataset.id);
+    if(error){ c.checked=!c.checked; return toast('No se pudo guardar'); }
+    const g=D.gastos.find(x=>x.id===c.dataset.id); if(g) g.computa=c.checked;
+    renderCfg();
+  });
+  const bulk = async (val)=>{
+    const ids=D.gastos.filter(g=>!g.eliminado && g.persona_id===persRev).map(g=>g.id);
+    if(!ids.length) return;
+    if(!confirm(`${val?'Tildar':'Destildar'} ${ids.length} gastos de esta persona?`)) return;
+    const { error } = await sb.from('gastos').update({computa:val}).in('id',ids);
+    if(error) return toast('No se pudo: '+error.message);
+    D.gastos.forEach(g=>{ if(ids.includes(g.id)) g.computa=val; });
+    renderCfg(); toast('Listo');
+  };
+  $('#btnAll').onclick  = ()=>bulk(true);
+  $('#btnNone').onclick = ()=>bulk(false);
   $('#btnOut').onclick = async ()=>{ await sb.auth.signOut(); location.reload(); };
   $('#btnReload').onclick = async ()=>{ await loadAll(); buildMesSel(); render(); toast('Datos actualizados'); };
   $('#btnCSV2').onclick = ()=>exportCSV(true);
