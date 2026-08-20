@@ -11,7 +11,7 @@
   "lang": "es-AR",
   "icons": [
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%232a78d6'/%3E%3Ctext x='256' y='352' font-size='280' text-anchor='middle' fill='white' font-family='Helvetica,Arial,sans-serif' font-weight='bold'%3E%24%3C/text%3E%3C/svg%3E",
+      "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22 width=%22512%22 height=%22512%22 role=%22img%22 aria-label=%22Finanzas Familiares%22> <defs> <linearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22> <stop offset=%220%25%22 stop-color=%22%233d8ae8%22/> <stop offset=%22100%25%22 stop-color=%22%232565bd%22/> </linearGradient> </defs> <rect width=%22512%22 height=%22512%22 rx=%22114%22 fill=%22url(%23bg)%22/> <g fill=%22%23fff%22> <rect x=%22120%22 y=%22300%22 width=%2256%22 height=%22104%22 rx=%2222%22 opacity=%22.45%22/> <rect x=%22196%22 y=%22250%22 width=%2256%22 height=%22154%22 rx=%2222%22 opacity=%22.62%22/> <rect x=%22272%22 y=%22192%22 width=%2256%22 height=%22212%22 rx=%2222%22 opacity=%22.8%22/> <rect x=%22348%22 y=%22126%22 width=%2256%22 height=%22278%22 rx=%2222%22/> </g> </svg>",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

@@ -10,7 +10,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Finanzas Familiares</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22 width=%22512%22 height=%22512%22 role=%22img%22 aria-label=%22Finanzas Familiares%22> <defs> <linearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22> <stop offset=%220%25%22 stop-color=%22%233d8ae8%22/> <stop offset=%22100%25%22 stop-color=%22%232565bd%22/> </linearGradient> </defs> <rect width=%22512%22 height=%22512%22 rx=%22114%22 fill=%22url(%23bg)%22/> <g fill=%22%23fff%22> <rect x=%22120%22 y=%22300%22 width=%2256%22 height=%22104%22 rx=%2222%22 opacity=%22.45%22/> <rect x=%22196%22 y=%22250%22 width=%2256%22 height=%22154%22 rx=%2222%22 opacity=%22.62%22/> <rect x=%22272%22 y=%22192%22 width=%2256%22 height=%22212%22 rx=%2222%22 opacity=%22.8%22/> <rect x=%22348%22 y=%22126%22 width=%2256%22 height=%22278%22 rx=%2222%22/> </g> </svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22 width=%22512%22 height=%22512%22 role=%22img%22 aria-label=%22Finanzas Familiares%22> <defs> <linearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22> <stop offset=%220%25%22 stop-color=%22%233d8ae8%22/> <stop offset=%22100%25%22 stop-color=%22%232565bd%22/> </linearGradient> </defs> <rect width=%22512%22 height=%22512%22 rx=%22114%22 fill=%22url(%23bg)%22/> <g fill=%22%23fff%22> <rect x=%22120%22 y=%22300%22 width=%2256%22 height=%22104%22 rx=%2222%22 opacity=%22.45%22/> <rect x=%22196%22 y=%22250%22 width=%2256%22 height=%22154%22 rx=%2222%22 opacity=%22.62%22/> <rect x=%22272%22 y=%22192%22 width=%2256%22 height=%22212%22 rx=%2222%22 opacity=%22.8%22/> <rect x=%22348%22 y=%22126%22 width=%2256%22 height=%22278%22 rx=%2222%22/> </g> </svg>">
 <style>
 /* ============================ DESIGN TOKENS ============================ */
 :root{
@@ -79,7 +80,7 @@ header{
 }
 header .inner{max-width:820px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .brand{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:-.02em}
-.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);flex:none}
+.brand .mark{width:22px;height:22px;border-radius:6px;flex:none;display:block}
 
 /* =============================== CARDS ================================ */
 .card{background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px;box-shadow:var(--shadow)}
@@ -207,7 +208,7 @@ svg.chart{display:block;width:100%;height:auto;overflow:visible}
 <!-- ============================== LOGIN ============================== -->
 <div id="login" class="gate hide">
   <div class="card">
-    <div class="brand mb"><span class="dot"></span> Finanzas Familiares</div>
+    <div class="brand mb"><img class="mark" src="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22 width=%22512%22 height=%22512%22 role=%22img%22 aria-label=%22Finanzas Familiares%22> <defs> <linearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22> <stop offset=%220%25%22 stop-color=%22%233d8ae8%22/> <stop offset=%22100%25%22 stop-color=%22%232565bd%22/> </linearGradient> </defs> <rect width=%22512%22 height=%22512%22 rx=%22114%22 fill=%22url(%23bg)%22/> <g fill=%22%23fff%22> <rect x=%22120%22 y=%22300%22 width=%2256%22 height=%22104%22 rx=%2222%22 opacity=%22.45%22/> <rect x=%22196%22 y=%22250%22 width=%2256%22 height=%22154%22 rx=%2222%22 opacity=%22.62%22/> <rect x=%22272%22 y=%22192%22 width=%2256%22 height=%22212%22 rx=%2222%22 opacity=%22.8%22/> <rect x=%22348%22 y=%22126%22 width=%2256%22 height=%22278%22 rx=%2222%22/> </g> </svg>" alt="" width="22" height="22"> Finanzas Familiares</div>
     <h1>Entrar</h1>
     <!-- Form real: es lo que hace que el navegador ofrezca guardar la contraseña. -->
     <form id="lgForm" autocomplete="on">
@@ -229,7 +230,7 @@ svg.chart{display:block;width:100%;height:auto;overflow:visible}
 <!-- =============================== APP =============================== -->
 <div id="app" class="hide">
   <header><div class="inner">
-    <div class="brand"><span class="dot"></span> <span id="hdTitle">Este mes</span></div>
+    <div class="brand"><img class="mark" src="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22 width=%22512%22 height=%22512%22 role=%22img%22 aria-label=%22Finanzas Familiares%22> <defs> <linearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22> <stop offset=%220%25%22 stop-color=%22%233d8ae8%22/> <stop offset=%22100%25%22 stop-color=%22%232565bd%22/> </linearGradient> </defs> <rect width=%22512%22 height=%22512%22 rx=%22114%22 fill=%22url(%23bg)%22/> <g fill=%22%23fff%22> <rect x=%22120%22 y=%22300%22 width=%2256%22 height=%22104%22 rx=%2222%22 opacity=%22.45%22/> <rect x=%22196%22 y=%22250%22 width=%2256%22 height=%22154%22 rx=%2222%22 opacity=%22.62%22/> <rect x=%22272%22 y=%22192%22 width=%2256%22 height=%22212%22 rx=%2222%22 opacity=%22.8%22/> <rect x=%22348%22 y=%22126%22 width=%2256%22 height=%22278%22 rx=%2222%22/> </g> </svg>" alt="" width="22" height="22"> <span id="hdTitle">Este mes</span></div>
     <div class="row">
       <select id="mesSel" style="width:auto;padding:7px 9px;font-size:.82rem;font-weight:600"></select>
       <button class="btn-sm btn-ghost" id="btnTheme" title="Tema">◐</button>
