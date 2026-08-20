@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2a78d6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Finanzas">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
 <title>Finanzas Familiares</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
 <style>
@@ -192,7 +197,7 @@ svg.chart{display:block;width:100%;height:auto;overflow:visible}
     <h1>Conectar con Supabase</h1>
     <p class="small muted mt-s">Pegá los datos de tu proyecto. Quedan guardados en este dispositivo.
     Los encontrás en Supabase, botón <b>Connect</b> arriba de todo, o en <b>Settings → API Keys</b>.</p>
-    <div class="field mt"><label>Project URL</label><input id="cfgUrl" placeholder="https://xxxxx.supabase.co" autocapitalize="off" spellcheck="false"></div>
+    <div class="field mt"><label>Project URL</label><input id="cfgUrl" value="https://bynhjpopxootvswionhu.supabase.co" placeholder="https://xxxxx.supabase.co" autocapitalize="off" spellcheck="false"></div>
     <div class="field"><label>Publishable key (o anon public)</label><input id="cfgKey" placeholder="sb_publishable_...  ó  eyJhbGciOi..." autocapitalize="off" spellcheck="false">
       <div class="xs dim" style="margin-top:4px">Sirve cualquiera de las dos. La que <b>nunca</b> va acá es la <i>secret</i> / <i>service_role</i>.</div></div>
     <button class="btn-primary" id="cfgSave">Guardar y continuar</button>
@@ -204,12 +209,20 @@ svg.chart{display:block;width:100%;height:auto;overflow:visible}
   <div class="card">
     <div class="brand mb"><span class="dot"></span> Finanzas Familiares</div>
     <h1>Entrar</h1>
-    <div class="field mt"><label>Email</label><input id="lgEmail" type="email" autocomplete="username" autocapitalize="off" spellcheck="false"></div>
-    <div class="field"><label>Contraseña</label><input id="lgPass" type="password" autocomplete="current-password"></div>
-    <button class="btn-primary" id="lgBtn">Entrar</button>
+    <!-- Form real: es lo que hace que el navegador ofrezca guardar la contraseña. -->
+    <form id="lgForm" autocomplete="on">
+      <div class="field mt"><label for="lgEmail">Email</label>
+        <input id="lgEmail" name="username" type="email" autocomplete="username"
+               autocapitalize="off" spellcheck="false" required></div>
+      <div class="field"><label for="lgPass">Contraseña</label>
+        <input id="lgPass" name="password" type="password" autocomplete="current-password" required></div>
+      <button class="btn-primary" id="lgBtn" type="submit">Entrar</button>
+    </form>
     <div id="lgMsg" class="small center mt-s" style="color:var(--bad)"></div>
     <div class="split-line"></div>
-    <button class="btn-ghost btn-sm" id="cfgReset" style="width:100%">Cambiar proyecto de Supabase</button>
+    <details><summary class="dim xs">Opciones avanzadas</summary>
+      <button class="btn-ghost btn-sm mt-s" id="cfgReset" style="width:100%">Cambiar proyecto de Supabase</button>
+    </details>
   </div>
 </div>
 
@@ -262,9 +275,15 @@ async function loadLib(){
 }
 
 /* ========================= CONFIG ========================= */
-/* Podés dejarlos vacíos y cargarlos desde la pantalla de setup,
-   o pegarlos acá directamente antes de subir a GitHub.          */
-const CONFIG = { url:'', key:'' };
+/* Proyecto de Supabase de la familia. Al estar acá, la app nunca pide
+   configuración: cualquier dispositivo que abra el archivo va directo al login.
+   La publishable key es pública por diseño (viaja en el navegador de cualquiera
+   que abra la página). Lo que protege los datos es el login + las políticas RLS.
+   La clave 'secret' / 'service_role' NO va acá nunca.                          */
+const CONFIG = {
+  url: 'https://bynhjpopxootvswionhu.supabase.co',
+  key: 'sb_publishable_7z4xe10i3AVaL5DHpYmzQw_RPlWDrVF'
+};
 
 const LS = 'ff.cfg';
 function getCfg(){
@@ -381,15 +400,23 @@ async function boot(){
   const cfg = getCfg();
   if(!cfg){ $('#setup').classList.remove('hide'); return; }
   $('#login').classList.remove('hide');
+  /* Si las claves vienen fijas en el archivo, no tiene sentido ofrecer cambiarlas. */
+  if(CONFIG.url && CONFIG.key) $('#login details')?.classList.add('hide');
+  $('#lgEmail').value = localStorage.getItem('ff.email') || '';
   $('#lgMsg').style.color = 'var(--ink-3)';
   $('#lgMsg').textContent = 'Conectando…';
   try { await loadLib(); }
   catch { $('#lgMsg').textContent = 'No se pudo cargar la librería de Supabase. Revisá la conexión a internet y recargá la página.'; return; }
   $('#lgMsg').textContent = ''; $('#lgMsg').style.color = 'var(--bad)';
   try {
-    sb = createClient(cfg.url, cfg.key);
+    /* persistSession + autoRefreshToken: la sesión queda guardada en el dispositivo
+       y el token se renueva solo, así no hay que volver a entrar cada vez. */
+    sb = createClient(cfg.url, cfg.key, {
+      auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:false, storageKey:'ff.auth' }
+    });
     const { data:{ session } } = await sb.auth.getSession();
     if(session){ user=session.user; $('#login').classList.add('hide'); await start(); }
+    else if($('#lgEmail').value) $('#lgPass').focus();
   } catch(e){ $('#lgMsg').textContent = 'Error conectando: '+e.message; }
 }
 $('#cfgSave').onclick = ()=>{
@@ -401,16 +428,17 @@ $('#cfgSave').onclick = ()=>{
   localStorage.setItem(LS, JSON.stringify({url,key})); location.reload();
 };
 $('#cfgReset').onclick = ()=>{ localStorage.removeItem(LS); location.reload(); };
-$('#lgBtn').onclick = async ()=>{
+$('#lgForm').addEventListener('submit', async e=>{
+  e.preventDefault();
   const email=$('#lgEmail').value.trim(), password=$('#lgPass').value;
   if(!email||!password) return $('#lgMsg').textContent='Completá email y contraseña.';
   $('#lgBtn').textContent='Entrando…'; $('#lgBtn').disabled=true;
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
   $('#lgBtn').textContent='Entrar'; $('#lgBtn').disabled=false;
   if(error){ $('#lgMsg').textContent = 'No pudimos entrar: '+error.message; return; }
+  localStorage.setItem('ff.email', email);       // para no volver a tipearlo
   user=data.user; $('#login').classList.add('hide'); await start();
-};
-$('#lgPass').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#lgBtn').click(); });
+});
 
 async function start(){
   $('#app').classList.remove('hide');
