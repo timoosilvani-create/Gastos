@@ -168,6 +168,7 @@ nav button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width
 nav button[aria-current="page"]{color:var(--accent)}
 
 /* ============================== MISC ================================== */
+.ctabox{border:1px solid var(--line);border-radius:var(--r);padding:10px 11px;margin-top:9px;background:var(--surface-1)}
 .donutwrap{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .donutsvg{width:168px;height:168px;flex:none}
 .donutleg{flex:1;min-width:186px;display:flex;flex-direction:column;gap:4px}
@@ -299,7 +300,7 @@ async function loadLib(){
    que abra la página). Lo que protege los datos es el login + las políticas RLS.
    La clave 'secret' / 'service_role' NO va acá nunca.                          */
 /* Versión del archivo. Al publicar una nueva en GitHub, subila y la app avisa sola. */
-const VERSION = '2026.08.20-2';
+const VERSION = '2026.09.07-1';
 
 const CONFIG = {
   url: 'https://bynhjpopxootvswionhu.supabase.co',
@@ -353,7 +354,7 @@ const uuid = ()=> (crypto.randomUUID ? crypto.randomUUID()
 
 /* ========================= STATE ========================== */
 let sb=null, user=null, view='reg', mes=thisMonth();
-const D = { personas:[], categorias:[], medios:[], gastos:[], ingresos:[], fijos:[], presupuestos:[], cuotasInf:[] };
+const D = { personas:[], categorias:[], medios:[], gastos:[], ingresos:[], fijos:[], presupuestos:[], cuotasInf:[], cuentas:[] };
 
 /* ========================= CHARTS ========================= */
 /* Barras horizontales: una magnitud, un solo tono por serie. */
@@ -430,6 +431,9 @@ const byId = (arr,id)=>arr.find(x=>x.id===id);
 const catOf = id => byId(D.categorias,id);
 const perOf = id => byId(D.personas,id);
 const medOf = id => byId(D.medios,id);
+const ctaOf = id => byId(D.cuentas,id);
+/* Una transferencia o un débito salen de una cuenta; una tarjeta de crédito no. */
+const pideCuenta = m => m && (m.tipo==='transferencia' || m.tipo==='tarjeta_debito');
 /* Un gasto "computa" si entra en el análisis familiar. Los personales de los
    hijos se destildan desde Ajustes y dejan de sumar. */
 let verTodo = false;
@@ -451,8 +455,10 @@ function groupBy(rows, keyFn, labelFn, colorFn){
   return [...m.values()].sort((a,b)=>b.value-a.value);
 }
 function mesesConDatos(){
+  /* Siempre incluye el mes en curso, aunque todavía no tenga nada cargado:
+     si no, el primer gasto del mes no tendría dónde verse. */
   const s=new Set([...D.gastos.filter(g=>!g.eliminado).map(g=>g.mes),
-                   ...D.ingresos.filter(g=>!g.eliminado).map(g=>g.mes)]);
+                   ...D.ingresos.filter(g=>!g.eliminado).map(g=>g.mes), thisMonth()]);
   return [...s].filter(Boolean).sort();
 }
 
@@ -526,11 +532,12 @@ async function loadAll(){
     sb.from('gastos_fijos').select('*').eq('activo',true).order('orden'),
     sb.from('presupuestos').select('*'),
     sb.from('cuotas_informadas').select('*').order('mes'),
+    sb.from('cuentas').select('*').order('orden'),
   ];
   const r = await Promise.all(q);
   const err = r.find(x=>x.error);
   if(err){ toast('Error cargando datos: '+err.error.message); console.error(err.error); }
-  [D.personas,D.categorias,D.medios,D.gastos,D.ingresos,D.fijos,D.presupuestos,D.cuotasInf]
+  [D.personas,D.categorias,D.medios,D.gastos,D.ingresos,D.fijos,D.presupuestos,D.cuotasInf,D.cuentas]
     = r.map(x=>x.data||[]);
 }
 
@@ -543,10 +550,13 @@ $$('nav button').forEach(b=> b.onclick = ()=>{
   window.scrollTo(0,0); render();
 });
 function buildMesSel(){
-  /* Solo meses ya cerrados: el mes en curso todavía no tiene el resumen. */
-  const ms=mesesConDatos().filter(cerrado);
-  if(!ms.includes(mes)) mes = ms[ms.length-1] || addMonths(thisMonth(),-1);
-  $('#mesSel').innerHTML = ms.map(m=>`<option value="${m}"${m===mes?' selected':''}>${monthLabel(m)}</option>`).join('');
+  /* En "Mes" se ve también el mes en curso: es donde cargan el día a día.
+     El que descarta el mes abierto es el Análisis, para no comparar contra
+     un mes incompleto. */
+  const ms=mesesConDatos();
+  if(!ms.includes(mes)) mes = ms[ms.length-1] || thisMonth();
+  $('#mesSel').innerHTML = ms.map(m=>
+    `<option value="${m}"${m===mes?' selected':''}>${monthLabel(m)}${m===mesAbierto()?' · en curso':''}</option>`).join('');
 }
 $('#mesSel').onchange = e => { mes=e.target.value; render(); };
 $('#btnTheme').onclick = ()=>{
@@ -565,7 +575,7 @@ function render(){
 }
 
 /* ======================= REGISTRAR ======================== */
-let regTipo='gasto', regMoneda='ARS', regClase='variable', regCat=null, regPer=null, regMed=null, regCuotas=1;
+let regTipo='gasto', regMoneda='ARS', regClase='variable', regCat=null, regPer=null, regMed=null, regCuotas=1, regCta=null;
 
 function renderReg(){
   const cats = D.categorias.filter(c=>c.tipo===regTipo && c.activa);
@@ -617,6 +627,13 @@ function renderReg(){
         ${D.medios.filter(m=>m.activo).map(m=>`<option value="${m.id}"${regMed===m.id?' selected':''}>${esc(m.nombre)}${m.banco?' · '+esc(m.banco):''}</option>`).join('')}
       </select>
     </div>
+    <div class="field${pideCuenta(medOf(regMed))?'':' hide'}" id="rCtaWrap">
+      <label>¿De qué cuenta sale?</label>
+      <select id="rCta">
+        <option value="">— elegí la cuenta —</option>
+        ${D.cuentas.filter(c=>c.activa).map(c=>`<option value="${c.id}"${regCta===c.id?' selected':''}>${esc(c.nombre)}${c.numero?' · '+esc(c.numero):''}</option>`).join('')}
+      </select>
+    </div>
     <div class="f2">
       <div class="field">
         <label>Tipo</label>
@@ -630,6 +647,13 @@ function renderReg(){
         <select id="rCuotas">${[1,2,3,6,9,12,18,24].map(n=>`<option value="${n}"${regCuotas===n?' selected':''}>${n===1?'1 pago':n+' cuotas'}</option>`).join('')}</select>
       </div>
     </div>` : `
+    <div class="field">
+      <label>¿A qué cuenta entra?</label>
+      <select id="rCta">
+        <option value="">— sin especificar —</option>
+        ${D.cuentas.filter(c=>c.activa).map(c=>`<option value="${c.id}"${regCta===c.id?' selected':''}>${esc(c.nombre)}${c.numero?' · '+esc(c.numero):''}</option>`).join('')}
+      </select>
+    </div>
     <div class="field row" style="gap:8px;align-items:center">
       <input type="checkbox" id="rRec" style="width:auto"> <label for="rRec" style="margin:0;text-transform:none;font-size:.85rem;letter-spacing:0">Es un ingreso que se repite todos los meses</label>
     </div>`}
@@ -660,7 +684,14 @@ function renderReg(){
   $$('#rPers .chip').forEach(b=>b.onclick=()=>{ regPer = regPer===b.dataset.p?null:b.dataset.p;
       $$('#rPers .chip').forEach(x=>x.setAttribute('aria-pressed',x.dataset.p===regPer)); });
   const cu=$('#rCuotas'); if(cu) cu.onchange=e=>{ regCuotas=+e.target.value; hint(); };
-  const md=$('#rMed'); if(md) md.onchange=e=>{ regMed=e.target.value||null; };
+  const md=$('#rMed'); if(md) md.onchange=e=>{
+    regMed=e.target.value||null;
+    const m=medOf(regMed);
+    $('#rCtaWrap').classList.toggle('hide', !pideCuenta(m));
+    if(!pideCuenta(m)) regCta=null;
+    else if(!regCta && m && m.cuenta_id) { regCta=m.cuenta_id; $('#rCta').value=regCta; }
+  };
+  const ct=$('#rCta'); if(ct) ct.onchange=e=>{ regCta=e.target.value||null; };
   $('#rMonto').oninput = hint;
   $('#rSave').onclick = saveMov;
   bindDelete('#v-reg');
@@ -712,7 +743,8 @@ async function saveMov(){
   if(regTipo==='ingreso'){
     ({ error } = await sb.from('ingresos').insert({
       fecha, concepto:desc, monto, moneda:regMoneda,
-      persona_id:regPer, recurrente:$('#rRec')?.checked||false, notas:nota }));
+      persona_id:regPer, recurrente:$('#rRec')?.checked||false, notas:nota,
+      cuenta_id: regCta || null }));
   } else if(regCuotas>1){
     const grupo=uuid(), cuota=Math.round((monto/regCuotas)*100)/100;
     const base=monthOf(fecha), day=+fecha.slice(8,10);
@@ -720,12 +752,14 @@ async function saveMov(){
       fecha: monthDay(addMonths(base,i), day),
       descripcion: desc, monto: cuota, moneda: regMoneda,
       categoria_id: regCat, persona_id: regPer, medio_pago_id: regMed,
-      tipo: regClase, grupo_cuota: grupo, cuota_nro:i+1, cuota_total:regCuotas, notas:nota }));
+      tipo: regClase, grupo_cuota: grupo, cuota_nro:i+1, cuota_total:regCuotas, notas:nota,
+      cuenta_id: regCta || medOf(regMed)?.cuenta_id || null }));
     ({ error } = await sb.from('gastos').insert(rows));
   } else {
     ({ error } = await sb.from('gastos').insert({
       fecha, descripcion:desc, monto, moneda:regMoneda, categoria_id:regCat,
-      persona_id:regPer, medio_pago_id:regMed, tipo:regClase, notas:nota }));
+      persona_id:regPer, medio_pago_id:regMed, tipo:regClase, notas:nota,
+      cuenta_id: regCta || medOf(regMed)?.cuenta_id || null }));
   }
   $('#rSave').disabled=false;
   if(error){ toast('No se pudo guardar: '+error.message); renderReg(); return; }
@@ -799,7 +833,8 @@ function renderMes(){
 let anaCur='ARS', anaN=12;
 let persRev=null;
 function renderAna(){
-  let ms=[]; for(let i=anaN-1;i>=0;i--) ms.push(addMonths(mes,-i));
+  const base = cerrado(mes) ? mes : addMonths(mesAbierto(),-1);   // último mes cerrado
+  let ms=[]; for(let i=anaN-1;i>=0;i--) ms.push(addMonths(base,-i));
   ms=ms.filter(cerrado);                      // nunca analizamos el mes en curso
   /* Un mes sin resumen cargado no es un mes de gasto cero: se recorta el tramo
      inicial sin datos para no dibujar una caída que nunca existió. */
@@ -825,7 +860,7 @@ function renderAna(){
     .slice(0,10).map(o=>({...o,cur:anaCur}));
 
   /* Comparación mes actual vs promedio por categoría */
-  const catMes = groupBy(gastosMes(mes,anaCur),r=>r.categoria_id,
+  const catMes = groupBy(gastosMes(base,anaCur),r=>r.categoria_id,
                           r=>catOf(r.categoria_id)?.nombre||'Sin categoría',
                           r=>catOf(r.categoria_id)?.color||cssv('--ink-3'));
   const nMeses = Math.max(conDatos.length,1);
@@ -855,8 +890,8 @@ function renderAna(){
     <div class="kpis">
       <div class="kpi"><div class="l">Promedio mensual</div><div class="v num">${money(prom,anaCur)}</div>
         <div class="d">sobre ${conDatos.length} ${conDatos.length===1?'mes':'meses'} con datos</div></div>
-      <div class="kpi"><div class="l">Este mes</div><div class="v num">${money(sum(gastosMes(mes,anaCur)),anaCur)}</div>
-        <div class="d">${prom?`<span class="${sum(gastosMes(mes,anaCur))>prom?'up':'dn'}">${sum(gastosMes(mes,anaCur))>prom?'+':''}${(100*(sum(gastosMes(mes,anaCur))/prom-1)).toFixed(0)}%</span> vs promedio`:'—'}</div></div>
+      <div class="kpi"><div class="l">${monthLabel(base)}</div><div class="v num">${money(sum(gastosMes(base,anaCur)),anaCur)}</div>
+        <div class="d">${prom?`<span class="${sum(gastosMes(base,anaCur))>prom?'up':'dn'}">${sum(gastosMes(base,anaCur))>prom?'+':''}${(100*(sum(gastosMes(base,anaCur))/prom-1)).toFixed(0)}%</span> vs promedio`:'—'}</div></div>
     </div>
   </div>
 
@@ -884,8 +919,8 @@ function renderAna(){
 
   <div class="card"><div class="card-t">Gasto por categoría · detalle</div>${barsH(cats,totalR)}</div>
 
-  <div class="card"><div class="card-t">Este mes vs promedio, por categoría</div>
-    <div class="scroll-x"><table style="min-width:420px"><tr><th>Categoría</th><th class="n">${monthShort(mes)}</th><th class="n">Promedio</th><th class="n">Dif</th></tr>
+  <div class="card"><div class="card-t">${monthLabel(base)} vs promedio, por categoría</div>
+    <div class="scroll-x"><table style="min-width:420px"><tr><th>Categoría</th><th class="n">${monthShort(base)}</th><th class="n">Promedio</th><th class="n">Dif</th></tr>
     ${comp.length? comp.map(c=>`<tr><td><span class="sw" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.color};margin-right:6px"></span>${esc(c.label)}</td>
       <td class="n">${money(c.value,anaCur)}</td><td class="n dim">${money(c.prom,anaCur)}</td>
       <td class="n ${c.dif>0?'up':'dn'}">${c.dif!=null?(c.dif>0?'+':'')+c.dif.toFixed(0)+'%':'—'}</td></tr>`).join('')
@@ -991,6 +1026,48 @@ function renderCfg(){
   </div>
 
   <div class="card">
+    <div class="spread mb"><div class="card-t" style="margin:0">Cuentas y tarjetas</div>
+      <span class="badge">${D.cuentas.length} cuentas · ${D.medios.length} medios</span></div>
+    <p class="small muted">Cada tarjeta se debita de una cuenta. Abajo ves, para
+    ${monthLabel(mes)}, cuánto va a salir de cada una.</p>
+
+    <div class="btn-row mt-s">
+      <button class="btn-sm btn-ghost" id="btnAddCta">+ Agregar cuenta</button>
+      <button class="btn-sm btn-ghost" id="btnAddMed">+ Agregar tarjeta o medio</button>
+    </div>
+
+    ${D.cuentas.map(c=>{
+      const tarj=D.medios.filter(m=>m.cuenta_id===c.id);
+      const gm=gastosMes(mes,'ARS');
+      const tot=gm.filter(g=>{
+        const md=medOf(g.medio_pago_id);
+        return (md && md.cuenta_id===c.id) || (!md && g.cuenta_id===c.id) || (md && !md.cuenta_id && g.cuenta_id===c.id);
+      }).reduce((s,x)=>s+Number(x.monto),0);
+      return `<div class="ctabox">
+        <div class="spread">
+          <div><b>${esc(c.nombre)}</b>
+            <div class="xs dim">${esc(c.banco||'')}${c.numero?' · '+esc(c.numero):''} · ${esc(c.tipo.replace('_',' '))}</div></div>
+          <div class="right"><div class="num" style="font-weight:800">${money(tot)}</div>
+            <div class="xs dim">a debitar en ${monthShort(mes)}</div></div>
+        </div>
+        <div class="chips mt-s">
+          ${tarj.length? tarj.map(m=>{
+            const t=gm.filter(g=>g.medio_pago_id===m.id).reduce((s,x)=>s+Number(x.monto),0);
+            return `<span class="chip" style="cursor:default">${esc(m.nombre)} · ${money(t)}</span>`;
+          }).join('') : '<span class="xs dim">Sin tarjetas asignadas todavía</span>'}
+        </div>
+      </div>`;
+    }).join('') || '<div class="empty">Todavía no hay cuentas cargadas.</div>'}
+
+    ${(()=>{ const hu=D.medios.filter(m=>m.activo && !m.cuenta_id);
+      return hu.length? `<div class="ctabox" style="border-style:dashed">
+        <b class="small">Sin cuenta asignada</b>
+        <div class="chips mt-s">${hu.map(m=>
+          `<button class="chip" data-asig="${m.id}">${esc(m.nombre)} · asignar</button>`).join('')}</div>
+      </div>`:''; })()}
+  </div>
+
+  <div class="card">
     <div class="spread mb"><div class="card-t" style="margin:0">Gastos fijos mensuales</div>
       <span class="badge">${D.fijos.length} conceptos</span></div>
     <p class="small muted">Son las plantillas. Con un botón se cargan todos como gastos del mes en curso, y después ajustás el que haya cambiado de monto.</p>
@@ -1030,13 +1107,13 @@ function renderCfg(){
         <div class="kpi grow" style="box-shadow:none"><div class="l">Cuenta como familiar</div><div class="v num" style="font-size:1rem">${money(inc)}</div></div>
         <div class="kpi grow" style="box-shadow:none"><div class="l">Queda afuera</div><div class="v num" style="font-size:1rem">${money(exc)}</div></div>
       </div>
-      <div class="list mt-s">${L.slice(0,300).map(g=>`<div class="item">
+      <div class="list mt-s">${L.slice(0,80).map(g=>`<div class="item">
         <input type="checkbox" class="ckc" data-id="${g.id}" ${g.computa!==false?'checked':''} style="width:auto;flex:none">
         <span class="sw" style="background:${catOf(g.categoria_id)?.color||cssv('--ink-3')}"></span>
         <span class="grow"><span class="t">${esc(g.descripcion)}</span>
           <span class="s">${monthShort(g.mes)} · ${esc(catOf(g.categoria_id)?.nombre||'—')}${g.cuota_total>1?` · cuota ${g.cuota_nro}/${g.cuota_total}`:''}</span></span>
         <span class="a">${money(g.monto,g.moneda)}</span></div>`).join('')}</div>
-      ${L.length>300?`<div class="xs dim center mt-s">Mostrando los 300 de mayor importe de ${L.length}.</div>`:''}`;
+      ${L.length>80?`<div class="xs dim center mt-s">Mostrando los 80 de mayor importe, de ${L.length}. Los demás son montos chicos.</div>`:''}`;
     })()}
   </div>
 
@@ -1044,14 +1121,6 @@ function renderCfg(){
     <div class="card-t">Categorías (${D.categorias.length})</div>
     <div class="chips">${D.categorias.map(c=>`<span class="chip"><span class="sw" style="background:${c.color}"></span>${esc(c.nombre)}</span>`).join('')}</div>
     <div class="xs dim mt-s">Para agregar o renombrar categorías, entrá a Supabase → Table editor → categorias.</div>
-  </div>
-
-  <div class="card">
-    <div class="card-t">Medios de pago (${D.medios.length})</div>
-    <div class="list">${D.medios.map(m=>`<div class="item">
-      <span class="grow"><span class="t">${esc(m.nombre)}</span>
-        <span class="s">${esc(m.banco||m.tipo)}${m.dia_cierre?` · cierra el ${m.dia_cierre}, vence el ${m.dia_venc}`:''}</span></span>
-    </div>`).join('')}</div>
   </div>
 
   <div class="card">
@@ -1063,6 +1132,42 @@ function renderCfg(){
     <div class="xs dim mt-s">${D.gastos.length} gastos y ${D.ingresos.length} ingresos cargados.</div>
     <div class="xs dim">Versión ${VERSION}</div>
   </div>`;
+
+  /* --- alta de cuentas y de medios de pago, y asignación tarjeta→cuenta --- */
+  $('#btnAddCta').onclick = async ()=>{
+    const nombre=prompt('Nombre de la cuenta\n(ej: "Nación · Caja de ahorro")'); if(!nombre) return;
+    const banco =prompt('Banco (opcional)')||null;
+    const numero=prompt('Número de cuenta (opcional)')||null;
+    const { error } = await sb.from('cuentas').insert({
+      nombre:nombre.trim(), banco, numero, orden:(D.cuentas.length+1)});
+    if(error) return toast('No se pudo: '+error.message);
+    await loadAll(); renderCfg(); toast('Cuenta agregada');
+  };
+  $('#btnAddMed').onclick = async ()=>{
+    const nombre=prompt('Nombre de la tarjeta o medio\n(ej: "VISA Galicia" o "Transferencia")'); if(!nombre) return;
+    const tipo=(prompt('Tipo: credito / debito / transferencia / efectivo','credito')||'credito').toLowerCase();
+    const T={credito:'tarjeta_credito',debito:'tarjeta_debito',transferencia:'transferencia',efectivo:'efectivo'};
+    const banco=prompt('Banco (opcional)')||null;
+    let cuenta_id=null;
+    if(D.cuentas.length){
+      const lista=D.cuentas.map((c,i)=>`${i+1}. ${c.nombre}`).join('\n');
+      const n=prompt('¿De qué cuenta se debita?\n'+lista+'\n\nNúmero (vacío = ninguna)');
+      if(n && D.cuentas[+n-1]) cuenta_id=D.cuentas[+n-1].id;
+    }
+    const { error } = await sb.from('medios_pago').insert({
+      nombre:nombre.trim(), tipo:T[tipo]||'otro', banco, cuenta_id, orden:(D.medios.length+1)});
+    if(error) return toast('No se pudo: '+error.message);
+    await loadAll(); renderCfg(); toast('Medio agregado');
+  };
+  $$('#v-cfg [data-asig]').forEach(b=> b.onclick = async ()=>{
+    if(!D.cuentas.length) return toast('Primero creá una cuenta');
+    const lista=D.cuentas.map((c,i)=>`${i+1}. ${c.nombre}`).join('\n');
+    const n=prompt('Asignar "'+medOf(b.dataset.asig).nombre+'" a:\n'+lista);
+    const c=D.cuentas[+n-1]; if(!c) return;
+    const { error } = await sb.from('medios_pago').update({cuenta_id:c.id}).eq('id',b.dataset.asig);
+    if(error) return toast('No se pudo: '+error.message);
+    await loadAll(); renderCfg(); toast('Asignada');
+  });
 
   $('#perSel').onchange = e => { persRev=e.target.value; renderCfg(); };
   $$('#v-cfg .ckc').forEach(c=> c.onchange = async ()=>{
